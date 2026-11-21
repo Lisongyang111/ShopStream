@@ -1,0 +1,41 @@
+services:
+  product-db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: shopstream_root_dev
+      MYSQL_DATABASE: productdb
+      MYSQL_USER: product_user
+      MYSQL_PASSWORD: product_dev_password
+    ports:
+      - "3308:3306"
+    volumes:
+      - product-db-data:/var/lib/mysql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mysql -h 127.0.0.1
+          -u"$${MYSQL_USER}"
+          -p"$${MYSQL_PASSWORD}"
+          "$${MYSQL_DATABASE}"
+          -e "SELECT 1"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  product-service:
+    build:
+      context: ./product-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://product-db:3306/productdb
+      SPRING_DATASOURCE_USERNAME: product_user
+      SPRING_DATASOURCE_PASSWORD: product_dev_password
+    ports:
+      - "8080:8080"
+    depends_on:
+      product-db:
+        condition: service_healthy
+
+volumes:
+  product-db-data:
