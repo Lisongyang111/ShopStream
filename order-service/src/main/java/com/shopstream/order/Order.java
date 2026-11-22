@@ -8,6 +8,8 @@ import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -34,6 +36,16 @@ public class Order {
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal totalPrice = BigDecimal.ZERO;
 
+    @Enumerated(EnumType.STRING)
+    @Column(
+            nullable = false,
+            columnDefinition = "varchar(20) default 'PENDING'"
+    )
+    private OrderStatus status = OrderStatus.PENDING;
+
+    @Column(length = 500)
+    private String rejectionReason;
+
     protected Order() {
     }
 
@@ -48,6 +60,26 @@ public class Order {
         }
     }
 
+    public boolean confirm() {
+        if (status != OrderStatus.PENDING) {
+            return false;
+        }
+
+        status = OrderStatus.CONFIRMED;
+        rejectionReason = null;
+        return true;
+    }
+
+    public boolean reject(String reason) {
+        if (status != OrderStatus.PENDING) {
+            return false;
+        }
+
+        status = OrderStatus.REJECTED;
+        rejectionReason = reason;
+        return true;
+    }
+
     public Long getId() {
         return id;
     }
@@ -58,5 +90,13 @@ public class Order {
 
     public BigDecimal getTotalPrice() {
         return totalPrice;
+    }
+
+    public OrderStatus getStatus() {
+        return status;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
     }
 }

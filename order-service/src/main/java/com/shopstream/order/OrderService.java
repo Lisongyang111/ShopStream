@@ -3,6 +3,7 @@ package com.shopstream.order;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,18 +15,22 @@ public class OrderService {
 
     private final OrderRepository repository;
     private final ProductClient productClient;
+    private final ApplicationEventPublisher eventPublisher;
 
     public OrderService(
             OrderRepository repository,
-            ProductClient productClient) {
+            ProductClient productClient,
+            ApplicationEventPublisher eventPublisher) {
 
         this.repository = repository;
         this.productClient = productClient;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
     public Order create(List<OrderItemRequest> requests) {
         List<OrderItem> items = new ArrayList<>();
+        List<OrderItemEvent> eventItems = new ArrayList<>();
 
         for (OrderItemRequest request : requests) {
             ProductResponse product =
@@ -38,10 +43,24 @@ public class OrderService {
             );
 
             items.add(item);
+
+            eventItems.add(new OrderItemEvent(
+                    product.id(),
+                    request.quantity()
+            ));
         }
 
-        Order order = new Order(items);
-        return repository.save(order);
+        Order order = repository.save(new Order(items));
+
+        OrderEvent event = new OrderEvent(
+                "OrderPlaced",
+                order.getId(),
+                List.copyOf(eventItems)
+        );
+
+        eventPublisher.publishEvent(event);
+
+        return order;
     }
 
     public Order findById(Long id) {
