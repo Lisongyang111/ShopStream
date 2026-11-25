@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.TreeMap;
 
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +23,11 @@ public class InventoryService {
     }
 
     @Transactional
+    @CacheEvict(
+            cacheNames = "products",
+            allEntries = true,
+            condition = "#result.eventType() == 'StockReserved'"
+    )
     public InventoryEvent reserve(OrderEvent event) {
         if (event.orderId() == null) {
             throw new IllegalArgumentException("Order ID is required");

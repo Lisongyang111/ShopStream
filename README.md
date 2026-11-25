@@ -199,7 +199,7 @@ The mapping uses:
 - text for name and description
 - keyword for category
 - double for price
-- integer for stock
+- integer for stockgit add README.md
 
 GET /search supports a keyword, category, minimum and maximum price,
 and pagination. Combined queries use ElasticsearchOperations.
@@ -219,3 +219,24 @@ Page numbering starts at 0.
 - Deleting the product removed it from search results.
 - Category-only queries worked without a keyword.
 - Two products were returned across two pages with size=1.
+## Redis Cart and Product Cache
+
+Redis stores shopping carts and caches product lookups.
+
+### Shopping Cart
+
+- Each cart uses the user ID as its key.
+- Carts are stored with `@RedisHash("carts")` and a Redis `CrudRepository`.
+- The cart TTL is 86400 seconds (24 hours), configured with `@TimeToLive`.
+- Each cart update resets the TTL to 24 hours.
+- A confirmed checkout clears the cart.
+- A rejected or pending checkout keeps the cart.
+
+The 24-hour expiry keeps a cart available for a day and automatically removes abandoned carts.
+
+### Product Cache
+
+- Product lookup by ID uses `@Cacheable` with the `products` cache.
+- Updating or deleting a product evicts its cache entry.
+- Successful stock reservation clears the products cache so later lookups read the latest stock.
+- Redis requires a password supplied through the service configuration.

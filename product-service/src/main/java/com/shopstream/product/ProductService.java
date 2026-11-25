@@ -2,6 +2,8 @@ package com.shopstream.product;
 
 import java.util.List;
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,7 @@ public class ProductService {
         return repository.findAll();
     }
 
+    @Cacheable(cacheNames = "products", key = "#p0")
     public Product findById(Long id) {
         return repository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -47,6 +50,7 @@ public class ProductService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "products", key = "#p0")
     public Product update(Long id, ProductRequest request) {
         Product product = findById(id);
         applyRequest(product, request);
@@ -58,6 +62,7 @@ public class ProductService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "products", key = "#p0")
     public void delete(Long id) {
         Product product = findById(id);
 

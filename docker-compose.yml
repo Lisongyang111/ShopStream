@@ -32,12 +32,17 @@ services:
       SPRING_DATASOURCE_USERNAME: product_user
       SPRING_DATASOURCE_PASSWORD: product_dev_password
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: shopstream_redis_dev
     ports:
       - "8080:8080"
     depends_on:
       product-db:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   order-db:
@@ -165,9 +170,45 @@ services:
       order-service:
         condition: service_started
 
+  redis:
+    image: redis:7.4
+    environment:
+      REDIS_PASSWORD: shopstream_redis_dev
+    command:
+      - /bin/sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  cart-service:
+    build:
+      context: ./cart-service
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: shopstream_redis_dev
+      ORDER_SERVICE_URL: http://order-service:8080
+    ports:
+      - "8084:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      order-service:
+        condition: service_started
+
 volumes:
   product-db-data:
   order-db-data:
   kafka-data:
   notification-data:
   elasticsearch-data:
+  redis-data:
