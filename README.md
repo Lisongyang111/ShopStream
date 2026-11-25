@@ -183,3 +183,39 @@ docker compose up -d --build
 - Replaying OrderPlaced for the confirmed order left stock at 8.
 - The notification service logged confirmation and rejection emails.
 - A repeated final order event was skipped by the notification service.
+## Step 3 - Elasticsearch
+
+I added a single-node Elasticsearch container and a search service.
+Elasticsearch security is disabled for this local project, and
+ES_JAVA_OPTS sets the JVM heap size.
+
+The product service publishes ProductCreated, ProductUpdated and
+ProductDeleted to product-events, using the product ID as the key.
+
+The search service consumes these events and updates the products
+index through ElasticsearchRepository.
+
+The mapping uses:
+- text for name and description
+- keyword for category
+- double for price
+- integer for stock
+
+GET /search supports a keyword, category, minimum and maximum price,
+and pagination. Combined queries use ElasticsearchOperations.
+
+### Example
+
+```text
+http://localhost:8082/search?q=mug&category=kitchen&minPrice=20&maxPrice=30&page=0&size=10
+```
+
+Page numbering starts at 0.
+
+### Manual checks
+
+- A newly created product appeared in search results.
+- Changing its price updated the price range search results.
+- Deleting the product removed it from search results.
+- Category-only queries worked without a keyword.
+- Two products were returned across two pages with size=1.
