@@ -1,0 +1,33 @@
+spring:
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: product-route
+              uri: lb://product-service
+              predicates:
+                - Path=/api/products,/api/products/**
+              filters:
+                - StripPrefix=1
+
+            - id: order-route
+              uri: lb://order-service
+              predicates:
+                - Path=/api/orders,/api/orders/**
+              filters:
+                - StripPrefix=1
+
+            - id: cart-route
+              uri: lb://cart-service
+              predicates:
+                - Path=/api/carts,/api/carts/**
+              filters:
+                - StripPrefix=1
+
+            - id: search-route
+              uri: lb://search-service
+              predicates:
+                - Path=/api/search,/api/search/**
+              filters:
+                - StripPrefix=1

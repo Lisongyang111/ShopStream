@@ -2,6 +2,7 @@ package com.shopstream.order;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
@@ -14,17 +15,20 @@ public class InventoryEventListener {
 
     private final OrderStatusService orderStatusService;
     private final KafkaTemplate<String, OrderEvent> kafkaTemplate;
+    private final String orderEventsTopic;
 
     public InventoryEventListener(
             OrderStatusService orderStatusService,
-            KafkaTemplate<String, OrderEvent> kafkaTemplate) {
+            KafkaTemplate<String, OrderEvent> kafkaTemplate,
+            @Value("${app.topics.order-events}") String orderEventsTopic) {
 
         this.orderStatusService = orderStatusService;
         this.kafkaTemplate = kafkaTemplate;
+        this.orderEventsTopic = orderEventsTopic;
     }
 
     @KafkaListener(
-            topics = "inventory-events",
+            topics = "${app.topics.inventory-events}",
             groupId = "order-service"
     )
     public void handle(InventoryEvent event) {
@@ -41,7 +45,7 @@ public class InventoryEventListener {
         }
 
         kafkaTemplate.send(
-                "order-events",
+                orderEventsTopic,
                 result.orderId().toString(),
                 result
         ).join();

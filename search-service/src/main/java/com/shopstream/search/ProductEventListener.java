@@ -13,13 +13,12 @@ public class ProductEventListener {
 
     private final ProductSearchRepository repository;
 
-    public ProductEventListener(
-            ProductSearchRepository repository) {
+    public ProductEventListener(ProductSearchRepository repository) {
         this.repository = repository;
     }
 
     @KafkaListener(
-            topics = "product-events",
+            topics = "${app.topics.product-events}",
             groupId = "search-service"
     )
     public void handle(ProductEvent event) {

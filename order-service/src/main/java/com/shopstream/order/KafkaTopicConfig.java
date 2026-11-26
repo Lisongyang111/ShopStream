@@ -1,6 +1,7 @@
 package com.shopstream.order;
 
 import org.apache.kafka.clients.admin.NewTopic;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.TopicBuilder;
@@ -9,24 +10,27 @@ import org.springframework.kafka.config.TopicBuilder;
 public class KafkaTopicConfig {
 
     @Bean
-    public NewTopic orderEventsTopic() {
-        return TopicBuilder.name("order-events")
+    public NewTopic orderEventsTopic(
+            @Value("${app.topics.order-events}") String topic) {
+        return TopicBuilder.name(topic)
                 .partitions(3)
                 .replicas(1)
                 .build();
     }
 
     @Bean
-    public NewTopic inventoryEventsTopic() {
-        return TopicBuilder.name("inventory-events")
+    public NewTopic inventoryEventsTopic(
+            @Value("${app.topics.inventory-events}") String topic) {
+        return TopicBuilder.name(topic)
                 .partitions(3)
                 .replicas(1)
                 .build();
     }
 
     @Bean
-    public NewTopic productEventsTopic() {
-        return TopicBuilder.name("product-events")
+    public NewTopic productEventsTopic(
+            @Value("${app.topics.product-events}") String topic) {
+        return TopicBuilder.name(topic)
                 .partitions(3)
                 .replicas(1)
                 .build();

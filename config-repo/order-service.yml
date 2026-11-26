@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    url: jdbc:mysql://order-db:3306/orderdb
+    username: order_user
+    password: order_dev_password
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false

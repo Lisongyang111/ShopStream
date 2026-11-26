@@ -21,7 +21,10 @@ public class NotificationEventListener {
 
     @Transactional
     @KafkaListener(
-            topics = {"order-events", "inventory-events"},
+            topics = {
+                    "${app.topics.order-events}",
+                    "${app.topics.inventory-events}"
+            },
             groupId = "notification-service"
     )
     public void handle(NotificationEvent event) {

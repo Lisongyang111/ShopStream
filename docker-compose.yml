@@ -1,4 +1,46 @@
 services:
+  discovery-server:
+    build:
+      context: ./discovery-server
+
+  config-server:
+    build:
+      context: ./config-server
+    volumes:
+      - ./config-repo:/config-repo:ro
+    depends_on:
+      discovery-server:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - echo > /dev/tcp/127.0.0.1/8888
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  gateway-service:
+    build:
+      context: ./gateway-service
+    ports:
+      - "8080:8080"
+    depends_on:
+      config-server:
+        condition: service_healthy
+      product-service:
+        condition: service_started
+      product-service-2:
+        condition: service_started
+      order-service:
+        condition: service_started
+      cart-service:
+        condition: service_started
+      search-service:
+        condition: service_started
+
   product-db:
     image: mysql:8.4
     environment:
@@ -6,8 +48,6 @@ services:
       MYSQL_DATABASE: productdb
       MYSQL_USER: product_user
       MYSQL_PASSWORD: product_dev_password
-    ports:
-      - "3308:3306"
     volumes:
       - product-db-data:/var/lib/mysql
     healthcheck:
@@ -28,22 +68,35 @@ services:
     build:
       context: ./product-service
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://product-db:3306/productdb
-      SPRING_DATASOURCE_USERNAME: product_user
-      SPRING_DATASOURCE_PASSWORD: product_dev_password
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      SPRING_DATA_REDIS_HOST: redis
-      SPRING_DATA_REDIS_PORT: 6379
-      SPRING_DATA_REDIS_PASSWORD: shopstream_redis_dev
-    ports:
-      - "8080:8080"
+      EUREKA_INSTANCE_INSTANCE_ID: product-service-1
     depends_on:
+      config-server:
+        condition: service_healthy
       product-db:
         condition: service_healthy
       kafka:
         condition: service_healthy
       redis:
         condition: service_healthy
+      order-service:
+        condition: service_started
+
+  product-service-2:
+    build:
+      context: ./product-service
+    environment:
+      EUREKA_INSTANCE_INSTANCE_ID: product-service-2
+    depends_on:
+      config-server:
+        condition: service_healthy
+      product-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      order-service:
+        condition: service_started
 
   order-db:
     image: mysql:8.4
@@ -71,19 +124,11 @@ services:
   order-service:
     build:
       context: ./order-service
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://order-db:3306/orderdb
-      SPRING_DATASOURCE_USERNAME: order_user
-      SPRING_DATASOURCE_PASSWORD: order_dev_password
-      PRODUCT_SERVICE_URL: http://product-service:8080
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-    ports:
-      - "8081:8080"
     depends_on:
+      config-server:
+        condition: service_healthy
       order-db:
         condition: service_healthy
-      product-service:
-        condition: service_started
       kafka:
         condition: service_healthy
 
@@ -118,14 +163,11 @@ services:
   notification-service:
     build:
       context: ./notification-service
-    environment:
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      SPRING_DATASOURCE_URL: "jdbc:h2:file:/app/data/notifications;DB_CLOSE_ON_EXIT=FALSE"
-      SPRING_DATASOURCE_USERNAME: notification_user
-      SPRING_DATASOURCE_PASSWORD: notification_dev_password
     volumes:
       - notification-data:/app/data
     depends_on:
+      config-server:
+        condition: service_healthy
       kafka:
         condition: service_healthy
       order-service:
@@ -138,8 +180,6 @@ services:
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: "-Xms512m -Xmx512m"
     mem_limit: 1g
-    ports:
-      - "127.0.0.1:9200:9200"
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
     healthcheck:
@@ -157,12 +197,9 @@ services:
   search-service:
     build:
       context: ./search-service
-    environment:
-      SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-    ports:
-      - "8082:8080"
     depends_on:
+      config-server:
+        condition: service_healthy
       elasticsearch:
         condition: service_healthy
       kafka:
@@ -192,14 +229,9 @@ services:
   cart-service:
     build:
       context: ./cart-service
-    environment:
-      SPRING_DATA_REDIS_HOST: redis
-      SPRING_DATA_REDIS_PORT: 6379
-      SPRING_DATA_REDIS_PASSWORD: shopstream_redis_dev
-      ORDER_SERVICE_URL: http://order-service:8080
-    ports:
-      - "8084:8080"
     depends_on:
+      config-server:
+        condition: service_healthy
       redis:
         condition: service_healthy
       order-service:

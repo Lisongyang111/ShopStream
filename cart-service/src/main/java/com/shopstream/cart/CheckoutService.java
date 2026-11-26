@@ -2,10 +2,11 @@ package com.shopstream.cart;
 
 import java.util.List;
 
+import feign.FeignException;
+
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestClientException;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
@@ -23,7 +24,7 @@ public class CheckoutService {
     }
 
     public OrderResponse checkout(String userId) {
-        Cart cart = cartService.get(userId);
+        Cart cart = cartService.getForCheckout(userId);
 
         if (cart.getItems().isEmpty()) {
             throw new ResponseStatusException(
@@ -33,9 +34,19 @@ public class CheckoutService {
         }
 
         try {
-            OrderResponse order = orderClient.create(
-                    List.copyOf(cart.getItems())
-            );
+            OrderResponse order;
+
+            if (cart.getCheckoutOrderId() != null) {
+                order = orderClient.findById(
+                        cart.getCheckoutOrderId()
+                );
+            } else {
+                order = orderClient.create(
+                        List.copyOf(cart.getItems())
+                );
+
+                cartService.markCheckout(cart, order.id());
+            }
 
             for (int attempt = 0;
                     attempt < 10 && "PENDING".equals(order.status());
@@ -45,16 +56,7 @@ public class CheckoutService {
                 order = orderClient.findById(order.id());
             }
 
-            if ("CONFIRMED".equals(order.status())) {
-                cartService.clear(userId);
-            } else if (!"REJECTED".equals(order.status())
-                    && !"PENDING".equals(order.status())) {
-
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_GATEWAY,
-                        "Unknown order status"
-                );
-            }
+            cartService.applyCheckoutResult(cart, order);
 
             return order;
 
@@ -67,14 +69,17 @@ public class CheckoutService {
                     exception
             );
 
-        } catch (HttpClientErrorException exception) {
-            throw new ResponseStatusException(
-                    exception.getStatusCode(),
-                    "Order service rejected the checkout request",
-                    exception
-            );
+        } catch (FeignException exception) {
+            if (exception.status() >= 400
+                    && exception.status() < 500) {
 
-        } catch (RestClientException exception) {
+                throw new ResponseStatusException(
+                        HttpStatusCode.valueOf(exception.status()),
+                        "Order service rejected the checkout request",
+                        exception
+                );
+            }
+
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
                     "Could not communicate with order service",

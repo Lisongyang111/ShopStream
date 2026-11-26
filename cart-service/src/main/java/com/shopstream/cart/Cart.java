@@ -15,6 +15,8 @@ public class Cart {
 
     private List<CartItem> items = new ArrayList<>();
 
+    private Long checkoutOrderId;
+
     @TimeToLive
     private Long timeToLive = 86400L;
 
@@ -39,6 +41,14 @@ public class Cart {
 
     public void setItems(List<CartItem> items) {
         this.items = items;
+    }
+
+    public Long getCheckoutOrderId() {
+        return checkoutOrderId;
+    }
+
+    public void setCheckoutOrderId(Long checkoutOrderId) {
+        this.checkoutOrderId = checkoutOrderId;
     }
 
     public Long getTimeToLive() {

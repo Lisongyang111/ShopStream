@@ -1,242 +1,290 @@
 # ShopStream
 
-ShopStream is a distributed e-commerce platform built with Spring Boot.
+ShopStream is a distributed e-commerce course project built with Java 21, Spring Boot 4.0.10 and Spring Cloud 2025.1.5.
 
-## Current progress
-
-Step 1 implements product and order services, each with its own MySQL container and named volume.
-
-The order service retrieves product prices from the product service through HTTP. It stores the price at the time of purchase and calculates the order total.
+It includes product management, orders, inventory reservation, notifications, product search and a shopping cart.
 
 ## Requirements
 
-- Docker Desktop with the Docker engine running
-- Docker Compose
-- Internet access for the initial image and Maven dependency downloads
+- Docker Desktop running with Docker Compose
+- Internet access for the first build
 - Postman for manual API testing
 
-The applications use Java 21 and Spring Boot 4.0.10. Their Dockerfiles build the applications from source using Maven Wrapper.
+## Start and Stop
 
-## Start the system
+Run these commands from the ShopStream repository root.
 
-Run the following command from the repository root:
+Check the configuration:
 
-```shell
-docker compose up --build
+```sh
+docker compose config --quiet
 ```
 
-To start in the background:
+Build and start the system:
 
-```shell
+```sh
 docker compose up -d --build
 ```
 
-Check container status and application logs:
+Wait for the applications to finish starting and register with Eureka before sending requests.
 
-```shell
+Check containers:
+
+```sh
 docker compose ps
-docker compose logs --tail=50 product-service order-service
 ```
 
-Wait for both databases to become healthy and both applications to finish starting before sending requests.
+View logs:
+
+```sh
+docker compose logs --tail=80 gateway-service
+```
+
+Stop the system while keeping its data volumes:
+
+```sh
+docker compose down
+```
+
+Do not add `-v` unless you intend to delete the stored data.
 
 ## Services
 
-| Service | Purpose | Host access |
-|---|---|---|
-| product-service | Product management | http://localhost:8080 |
-| order-service | Order creation and retrieval | http://localhost:8081 |
-| product-db | Product database | localhost:3308 |
-| order-db | Order database | Internal Docker network |
+| Service | Purpose |
+|---|---|
+| gateway-service | Public API entry point |
+| discovery-server | Eureka service registration |
+| config-server | Central configuration |
+| product-service | Product management and stock reservation |
+| product-service-2 | Second instance of the same product application |
+| order-service | Order creation and status updates |
+| cart-service | Redis shopping carts and checkout |
+| search-service | Elasticsearch product search |
+| notification-service | Simulated email notifications |
+| product-db | Product MySQL database |
+| order-db | Order MySQL database |
+| kafka | Event messaging in KRaft mode |
+| elasticsearch | Product search index |
+| redis | Shopping carts and product cache |
 
-Each service accesses its own database. The order service calls the product service at `http://product-service:8080` inside the Docker network.
+Only the gateway publishes a host port: `8080`.
+All other services communicate through the internal Docker network.
 
-## Configuration
+The two product instances share the product database and Redis cache.
+Both register in Eureka under the name `product-service`.
 
-Database connection settings are supplied through these environment variables:
+## API Address
 
-- `SPRING_DATASOURCE_URL`
-- `SPRING_DATASOURCE_USERNAME`
-- `SPRING_DATASOURCE_PASSWORD`
+All public requests use:
 
-The order service receives the product service address through `PRODUCT_SERVICE_URL`.
+```text
+http://localhost:8080/api
+```
 
-Development database credentials are defined in `docker-compose.yml`.
+The gateway removes the `/api` prefix and forwards requests using
+`lb://` service names.
 
-## Product API
+### Products
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| POST | /products | Create a product |
-| GET | /products | List products |
-| GET | /products/{id} | Retrieve a product |
-| PUT | /products/{id} | Update all editable product fields |
-| DELETE | /products/{id} | Delete a product |
+| POST | /api/products | Create a product |
+| GET | /api/products | List products |
+| GET | /api/products/{id} | Get a product |
+| PUT | /api/products/{id} | Update a product |
+| DELETE | /api/products/{id} | Delete a product |
 
-Example product request:
+Example creation request:
 
 ```json
 {
   "name": "Coffee Mug",
-  "description": "A ceramic mug for coffee",
+  "description": "A ceramic mug",
   "category": "kitchen",
   "price": 19.90,
   "stock": 10
 }
 ```
 
-Product names, descriptions and categories must contain text. Prices and stock quantities must be non-negative. Prices support up to ten integer digits and two decimal places.
+A product has an ID, name, description, category, price and stock.
+Use the actual product ID returned by the API in later requests.
 
-## Order API
+### Orders
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| POST | /orders | Create an order |
-| GET | /orders/{id} | Retrieve an order and its items |
+| POST | /api/orders | Create an order |
+| GET | /api/orders/{id} | Get an order and its status |
 
-The order request is a JSON array. Use an existing product ID returned by the product API.
+Example order request:
 
 ```json
 [
   {
-    "productId": 2,
-    "quantity": 2
+    "productId": 5,
+    "quantity": 1
   }
 ]
 ```
 
-An order must contain at least one item. Product IDs and quantities must be positive.
+The order service obtains current product prices through Feign,
+using the service name `product-service`.
 
-The order service obtains unit prices through HTTP and saves the order and its items in one database transaction.
+A new order starts as `PENDING`. Kafka processing changes it to
+`CONFIRMED` or `REJECTED`.
 
-Stock reservation and asynchronous order confirmation will be implemented in the Kafka stage.
+### Shopping Cart
 
-## Manual verification completed
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | /api/carts/{userId} | Get a cart |
+| POST | /api/carts/{userId}/items | Add an item |
+| PUT | /api/carts/{userId}/items/{productId} | Set quantity |
+| DELETE | /api/carts/{userId}/items/{productId} | Remove an item |
+| DELETE | /api/carts/{userId} | Empty a cart |
+| POST | /api/carts/{userId}/checkout | Create an order from the cart |
 
-- Product creation, retrieval, listing, update and deletion
-- Rejection of negative product stock
-- Order creation with a calculated total
-- Order retrieval with its items
-- Rejection of zero order quantity
-- Rejection of an order containing a missing product
-- Order retrieval after container removal and recreation
+Example add-item request:
 
-## Data persistence and shutdown
-
-The `product-db-data` and `order-db-data` named volumes store MySQL data.
-
-Stop and remove the containers and network while retaining database volumes:
-
-```shell
-docker compose down
+```json
+{
+  "productId": 5,
+  "quantity": 1
+}
 ```
 
-Start the containers again:
+Example quantity update:
 
-```shell
-docker compose up -d
+```json
+{
+  "quantity": 2
+}
 ```
 
-Adding `-v` to `docker compose down` deletes the database volumes and their data.
-## Step 2 - Kafka
+Checkout has no request body. It calls `order-service` through Feign.
 
-I added Kafka in KRaft mode and a notification service.
+- Confirmed checkout returns 201 and clears the cart.
+- Rejected checkout returns 409 and keeps the items.
+- Pending checkout returns 202 and keeps the items and checkout order ID.
+- A later cart query checks the saved order and clears the cart if confirmed.
+- A later checkout checks the saved pending order instead of creating another.
+- Item changes are blocked while that checkout remains pending.
 
-The system uses three topics, each with three partitions:
+### Search
+
+```text
+GET /api/search?q=mug&category=kitchen&minPrice=10&maxPrice=30&page=0&size=10
+```
+
+Search supports text in product names and descriptions, category,
+price range and pagination. Page numbering starts at 0.
+
+The search service uses ElasticsearchRepository and
+ElasticsearchOperations for combined queries.
+
+## Kafka Processing
+
+Kafka runs as a single broker in KRaft mode.
+
+Three topics are declared using NewTopic and TopicBuilder.
+Each topic has three partitions and one replica:
+
 - order-events
 - inventory-events
 - product-events
 
-Order and inventory messages use the order ID as their key.
-The product-events topic is ready for the search stage.
+Messages use JSON. Order and inventory events use the order ID as
+their key. Product events use the product ID.
 
-### Order processing
+Order processing:
 
-1. The order service saves a new order as PENDING.
-2. It publishes OrderPlaced after the database transaction commits.
-3. The product service checks stock and saves the reservation result
-   in the same transaction as the stock changes.
-4. It publishes StockReserved or StockRejected.
-5. The order service updates the order to CONFIRMED or REJECTED
-   and publishes the final order event.
-6. The notification service listens to order and inventory events.
-   It logs a simulated email for each final order status.
+1. The order service saves a PENDING order and publishes OrderPlaced.
+2. The product service checks all requested stock.
+3. Stock changes and the reservation result are stored in one transaction.
+4. The product service publishes StockReserved or StockRejected.
+5. The order service updates the final status and publishes the result.
+6. The notification service logs a simulated confirmation or rejection email.
 
-Stock reservation results are stored in MySQL. Receiving the same
-order again returns the saved result without deducting stock again.
+Reservation results are stored by order ID. Replaying a completed
+reservation returns its saved result without deducting stock again.
 
-The notification service stores processed order IDs in its own
-H2 database. A named Docker volume preserves these records.
+The notification service stores processed order IDs in its own H2
+database to skip repeated final notifications.
 
-### Run
+ProductCreated, ProductUpdated and ProductDeleted events update
+the Elasticsearch products index.
 
-```sh
-docker compose up -d --build
-```
+## Redis
 
-### Manual checks
+Redis requires a password.
 
-- Ordering two units changed the order to CONFIRMED.
-- Product stock decreased from 10 to 8.
-- Ordering 20 units was rejected because only 8 remained.
-- The rejected order did not change stock.
-- Replaying OrderPlaced for the confirmed order left stock at 8.
-- The notification service logged confirmation and rejection emails.
-- A repeated final order event was skipped by the notification service.
-## Step 3 - Elasticsearch
+Carts use `@RedisHash("carts")`, a Redis CrudRepository and the user ID
+as the key.
 
-I added a single-node Elasticsearch container and a search service.
-Elasticsearch security is disabled for this local project, and
-ES_JAVA_OPTS sets the JVM heap size.
+The cart TTL is 86400 seconds, or 24 hours, using `@TimeToLive`.
+Cart updates reset the TTL. This keeps carts available for a day
+and removes abandoned carts automatically.
 
-The product service publishes ProductCreated, ProductUpdated and
-ProductDeleted to product-events, using the product ID as the key.
+Product lookup by ID uses `@Cacheable` with the `products` cache.
+Updating or deleting a product evicts its entry.
+Successful stock reservation clears the products cache.
 
-The search service consumes these events and updates the products
-index through ElasticsearchRepository.
+## Configuration and Discovery
 
-The mapping uses:
-- text for name and description
-- keyword for category
-- double for price
-- integer for stockgit add README.md
+The configuration server uses the native file-system profile.
+The `config-repo` directory is mounted read-only into its container.
 
-GET /search supports a keyword, category, minimum and maximum price,
-and pagination. Combined queries use ElasticsearchOperations.
+- application.yml contains shared Kafka, Redis, Eureka and topic settings.
+- product-service.yml contains product database and cache settings.
+- order-service.yml contains order database settings.
+- notification-service.yml contains notification database settings.
+- search-service.yml contains the Elasticsearch address.
+- gateway-service.yml contains the gateway routes.
 
-### Example
+Business services and the gateway load configuration using
+`spring.config.import`.
 
-```text
-http://localhost:8082/search?q=mug&category=kitchen&minPrice=20&maxPrice=30&page=0&size=10
-```
+Eureka registers the services. Feign uses service names for
+order-to-product and cart-to-order calls.
 
-Page numbering starts at 0.
+Local development credentials are stored in the Compose and
+configuration files.
 
-### Manual checks
+## Request ID
 
-- A newly created product appeared in search results.
-- Changing its price updated the price range search results.
-- Deleting the product removed it from search results.
-- Category-only queries worked without a keyword.
-- Two products were returned across two pages with size=1.
-## Redis Cart and Product Cache
+The gateway has a custom global filter for `X-Request-Id`.
 
-Redis stores shopping carts and caches product lookups.
+It keeps an incoming request ID or generates one when absent.
+The ID is forwarded to the destination service, returned in the
+response headers and written to gateway logs.
 
-### Shopping Cart
+## Persistence
 
-- Each cart uses the user ID as its key.
-- Carts are stored with `@RedisHash("carts")` and a Redis `CrudRepository`.
-- The cart TTL is 86400 seconds (24 hours), configured with `@TimeToLive`.
-- Each cart update resets the TTL to 24 hours.
-- A confirmed checkout clears the cart.
-- A rejected or pending checkout keeps the cart.
+Named Docker volumes preserve:
 
-The 24-hour expiry keeps a cart available for a day and automatically removes abandoned carts.
+- Product and order MySQL data
+- Kafka data
+- Elasticsearch data
+- Redis data
+- Notification H2 records
 
-### Product Cache
+## Manual Checks
 
-- Product lookup by ID uses `@Cacheable` with the `products` cache.
-- Updating or deleting a product evicts its cache entry.
-- Successful stock reservation clears the products cache so later lookups read the latest stock.
-- Redis requires a password supplied through the service configuration.
+The following flows were tested during development:
+
+- Product creation, retrieval, update and deletion
+- Order totals and final confirmation
+- Insufficient-stock rejection
+- Reservation replay without a second stock deduction
+- Simulated confirmation and rejection notifications
+- Search synchronization, filters and pagination
+- Cart item operations and 24-hour TTL countdown
+- Successful checkout clearing the cart
+- Rejected checkout retaining cart items
+- Product cache creation and eviction
+- Eureka registration with two product instances
+- Configuration loading from Config Server
+- Feign calls using service names
+- All four gateway routes
+- Matching request IDs in response headers and gateway logs
+- Checkout through the gateway followed by an empty cart
